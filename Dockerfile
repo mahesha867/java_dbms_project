@@ -1,4 +1,4 @@
-﻿# Dockerfile for Render Web Service Deployment
+# Dockerfile for Render Web Service Deployment
 # Runtime: Apache Tomcat 10.1 (Jakarta Servlet 6.0) on Eclipse Temurin OpenJDK 21
 
 FROM tomcat:10.1-jdk21-temurin
@@ -32,9 +32,10 @@ RUN rm -rf /app
 
 # Copy Render dynamic port entrypoint script
 COPY render-entrypoint.sh /usr/local/tomcat/bin/render-entrypoint.sh
-RUN chmod +x /usr/local/tomcat/bin/render-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/tomcat/bin/render-entrypoint.sh && \
+    chmod +x /usr/local/tomcat/bin/render-entrypoint.sh
 
 # Expose HTTP ports
 EXPOSE 8080 10000
 
-ENTRYPOINT [/bin/sh, /usr/local/tomcat/bin/render-entrypoint.sh]
+ENTRYPOINT ["/bin/sh", "/usr/local/tomcat/bin/render-entrypoint.sh"]
