@@ -101,8 +101,9 @@ public class QrSessionDao implements Dao<QrSession> {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     QrSession s = mapResultSetToQrSession(rs);
-                    // Check current, previous, and adjacent 5-second windows for network transmission tolerance
-                    for (long offset : new long[]{0L, -5000L, 5000L, -10000L}) {
+                    // Check current, previous, and adjacent rotation windows for network transmission tolerance
+                    long stepMs = QrCodeUtil.ROTATION_INTERVAL_SECONDS * 1000L;
+                    for (long offset : new long[]{0L, -stepMs, stepMs, -2 * stepMs}) {
                         String code = QrCodeUtil.computeNumericCode(s.getId(), s.getCourseId(), now + offset);
                         if (numericCode.equals(code)) {
                             return Optional.of(s);

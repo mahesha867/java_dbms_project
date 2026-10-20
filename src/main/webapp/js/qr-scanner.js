@@ -2,9 +2,9 @@
  * ScanIn - Dynamic QR Generator & Scanner JS
  */
 
-// ── Dynamic QR Session Live 5-Second Auto-Refresher (Teacher Screen) ──
+// ── Dynamic QR Session Live 15-Second Auto-Refresher (Teacher Screen) ──
 function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNumericCode) {
-    let timeLeft = 5;
+    let timeLeft = 15;
     const timerElem = document.getElementById("qr-timer");
     const qrImg = document.getElementById("qr-image");
     const tokenDisplay = document.getElementById("token-display");
@@ -31,7 +31,7 @@ function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNum
         timeLeft--;
         if (timerElem) {
             timerElem.innerText = timeLeft + "s";
-            if (timeLeft <= 2) {
+            if (timeLeft <= 4) {
                 timerElem.className = "timer-badge"; // alert pulse
                 timerElem.style.background = "#fee2e2";
                 timerElem.style.color = "#dc2626";
@@ -42,14 +42,15 @@ function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNum
             }
         }
 
-        // When countdown reaches 0, fetch fresh server-signed token via 5s rotation AJAX
+        // When countdown reaches 0, fetch fresh server-signed token via 15s rotation AJAX
         if (timeLeft <= 0) {
-            timeLeft = 5;
+            timeLeft = 15;
             try {
                 const response = await fetch("active?courseId=" + courseId + "&format=json");
                 if (response.ok) {
                     const data = await response.json();
                     if (data.status === "ok") {
+                        timeLeft = data.expiresInSeconds || 15;
                         renderQr(data.token, data.scanUrl, data.numericCode);
                         if (countDisplay && data.markedCount !== undefined) {
                             countDisplay.innerText = data.markedCount;

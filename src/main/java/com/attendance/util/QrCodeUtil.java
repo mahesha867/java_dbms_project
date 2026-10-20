@@ -20,11 +20,11 @@ public class QrCodeUtil {
     private static final String HMAC_ALGO = "HmacSHA256";
     private static final String SECRET_KEY = "ScanIn#PurpleCollegiateAttendanceHMAC2026";
 
-    // Dynamic rotation interval on screen: 5 seconds
-    public static final int ROTATION_INTERVAL_SECONDS = 5;
+    // Dynamic rotation interval on screen: 15 seconds
+    public static final int ROTATION_INTERVAL_SECONDS = 15;
 
-    // Validity window: 7 seconds (5 seconds display + 2 seconds network transmission leeway)
-    public static final long VALIDITY_WINDOW_MS = 7000L;
+    // Validity window: 20 seconds (15 seconds display + 5 seconds network transmission leeway)
+    public static final long VALIDITY_WINDOW_MS = 20000L;
 
     /**
      * Generates a cryptographically server-signed, short-lived token for an active QR session.
@@ -68,8 +68,8 @@ public class QrCodeUtil {
      * Generates an intentionally expired signed token for automated testing.
      */
     public static String generateExpiredToken(int sessionId, int courseId) {
-        // Timestamp 15 seconds in the past
-        return generateSignedTokenWithTimestamp(sessionId, courseId, System.currentTimeMillis() - 15000L);
+        // Timestamp 30 seconds in the past
+        return generateSignedTokenWithTimestamp(sessionId, courseId, System.currentTimeMillis() - 30000L);
     }
 
     /**
