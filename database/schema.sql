@@ -106,6 +106,37 @@ CREATE TABLE IF NOT EXISTS attendance (
 );
 
 -- -------------------------------------------------------
+-- Table: scan_attempts (Auditing QR scans and fraud prevention)
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS scan_attempts (
+    id                 INT AUTO_INCREMENT PRIMARY KEY,
+    session_id         INT NULL,
+    student_id         INT NULL,
+    token_hash         VARCHAR(64) NOT NULL,
+    outcome            VARCHAR(50) NOT NULL,
+    attempted_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_scan_token_hash (token_hash),
+    INDEX idx_scan_student_session (student_id, session_id)
+);
+
+-- -------------------------------------------------------
+-- Table: attendance_audit_log (Immutable audit trail)
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS attendance_audit_log (
+    id                 INT AUTO_INCREMENT PRIMARY KEY,
+    attendance_id      INT NULL,
+    student_id         INT NOT NULL,
+    session_id         INT NULL,
+    changed_by_user_id INT NOT NULL,
+    old_status         VARCHAR(20),
+    new_status         VARCHAR(20) NOT NULL,
+    reason             TEXT NOT NULL,
+    created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_audit_student (student_id),
+    INDEX idx_audit_session (session_id)
+);
+
+-- -------------------------------------------------------
 -- Sample Data
 -- -------------------------------------------------------
 

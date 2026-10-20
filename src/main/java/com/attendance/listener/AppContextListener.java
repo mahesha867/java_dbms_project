@@ -49,13 +49,43 @@ public class AppContextListener implements ServletContextListener {
                 }
             }
 
-            // 2. Expand scan_attempts outcome column if needed
+            // 2. Ensure scan_attempts table exists
             try {
-                stmt.executeUpdate("ALTER TABLE scan_attempts MODIFY COLUMN outcome VARCHAR(50) NOT NULL");
-                System.out.println("[AppContextListener] Migrated scan_attempts.outcome to VARCHAR(50).");
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS scan_attempts (" +
+                        "id INT AUTO_INCREMENT PRIMARY KEY, " +
+                        "session_id INT NULL, " +
+                        "student_id INT NULL, " +
+                        "token_hash VARCHAR(64) NOT NULL, " +
+                        "outcome VARCHAR(50) NOT NULL, " +
+                        "attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
+                        "INDEX idx_scan_token_hash (token_hash), " +
+                        "INDEX idx_scan_student_session (student_id, session_id))");
+                System.out.println("[AppContextListener] Ensured scan_attempts table exists.");
             } catch (Exception e) {
-                System.out.println("[AppContextListener] scan_attempts.outcome migration notice: " + e.getMessage());
+                System.out.println("[AppContextListener] scan_attempts table notice: " + e.getMessage());
             }
+
+            // 2b. Ensure attendance_audit_log table exists
+            try {
+                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS attendance_audit_log (" +
+                        "id INT AUTO_INCREMENT PRIMARY KEY, " +
+                        "attendance_id INT NULL, " +
+                        "student_id INT NOT NULL, " +
+                        "session_id INT NULL, " +
+                        "changed_by_user_id INT NOT NULL, " +
+                        "old_status VARCHAR(20), " +
+                        "new_status VARCHAR(20) NOT NULL, " +
+                        "reason TEXT NOT NULL, " +
+                        "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+                System.out.println("[AppContextListener] Ensured attendance_audit_log table exists.");
+            } catch (Exception e) {
+                System.out.println("[AppContextListener] attendance_audit_log table notice: " + e.getMessage());
+            }
+
+            // 2c. Ensure attendance status column supports OD and EXCUSED
+            try {
+                stmt.executeUpdate("ALTER TABLE attendance MODIFY COLUMN status ENUM('PRESENT','ABSENT','LATE','OD','EXCUSED') DEFAULT 'PRESENT'");
+            } catch (Exception ignored) {}
 
             // 3. Clean up any corrupted legacy 'pending_init' sessions so they never block new sessions
             try {
