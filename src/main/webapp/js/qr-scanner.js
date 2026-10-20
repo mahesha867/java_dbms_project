@@ -54,6 +54,14 @@ function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNum
                         if (countDisplay && data.markedCount !== undefined) {
                             countDisplay.innerText = data.markedCount;
                         }
+                    } else if (data.status === "closed") {
+                        clearInterval(interval);
+                        if (timerElem) {
+                            timerElem.innerText = "Closed";
+                            timerElem.className = "timer-badge";
+                            timerElem.style.background = "#fee2e2";
+                            timerElem.style.color = "#dc2626";
+                        }
                     }
                 }
             } catch (err) {

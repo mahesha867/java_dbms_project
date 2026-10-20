@@ -139,7 +139,7 @@ public class AttendanceDao implements Dao<Attendance> {
      * Total sessions = all sessions initiated for the course.
      */
     public double getAttendancePercentage(int studentId, int courseId) {
-        String totalSessionsSql = "SELECT COUNT(*) FROM qr_sessions WHERE course_id = ?";
+        String totalSessionsSql = "SELECT COUNT(DISTINCT id) FROM qr_sessions WHERE course_id = ?";
         String attendedSql = "SELECT COUNT(*) FROM attendance WHERE student_id = ? AND course_id = ? AND status IN ('PRESENT','LATE','OD')";
 
         int totalSessions = 0;
@@ -293,6 +293,22 @@ public class AttendanceDao implements Dao<Attendance> {
                 }
             }
         }
+    }
+
+    /**
+     * Updates attendance status directly (e.g. transitioning from ABSENT to PRESENT when student scans in a reopened session).
+     */
+    public boolean updateStatus(int attendanceId, String status) {
+        String sql = "UPDATE attendance SET status = ?, marked_at = CURRENT_TIMESTAMP WHERE id = ?";
+        try (Connection conn = DBConnection.getInstance().getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, status);
+            ps.setInt(2, attendanceId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     /**

@@ -182,12 +182,14 @@ public class QrScanServlet extends HttpServlet {
                 return;
             }
 
-            // Replay Check for Full Signed Token
+            // Replay Check for Full Signed Token:
+            // The token must match the currently active rotation token on screen.
+            // Multiple enrolled students can scan the active token within its window,
+            // while duplicate scans by the same student are blocked per-session below.
             boolean isCurrentActive = token.equals(session.getSessionToken());
-            boolean alreadyUsed = scanAttemptDao.hasSuccessfulScan(tokenHash);
-            if (!isCurrentActive || alreadyUsed) {
+            if (!isCurrentActive) {
                 scanAttemptDao.recordAttempt(session.getId(), student.getStudentId(), tokenHash, "REPLAYED");
-                handleResult(request, response, isJson, false, "Token has already been used or replayed. Please scan the current code on screen.");
+                handleResult(request, response, isJson, false, "Token has already rotated or been replayed. Please scan the current code on screen.");
                 return;
             }
         }
@@ -210,8 +212,18 @@ public class QrScanServlet extends HttpServlet {
         // 6. Duplicate Scan Check (Same Student in Same Session)
         Optional<Attendance> existing = attendanceDao.findBySessionAndStudent(session.getId(), student.getStudentId());
         if (existing.isPresent()) {
-            scanAttemptDao.recordAttempt(session.getId(), student.getStudentId(), tokenHash, "DUPLICATE");
-            handleResult(request, response, isJson, false, "Attendance was already marked for this session.");
+            Attendance att = existing.get();
+            if (!"ABSENT".equalsIgnoreCase(att.getStatus())) {
+                scanAttemptDao.recordAttempt(session.getId(), student.getStudentId(), tokenHash, "DUPLICATE");
+                handleResult(request, response, isJson, false, "Attendance was already marked for this session.");
+                return;
+            }
+            // If student was marked ABSENT when meeting temporarily closed, transition to PRESENT upon valid scan
+            attendanceDao.updateStatus(att.getId(), "PRESENT");
+            scanAttemptDao.recordAttempt(session.getId(), student.getStudentId(), tokenHash, "SUCCESS");
+            Optional<Course> c = courseDao.findById(session.getCourseId());
+            String courseTitle = c.map(course -> course.getCourseCode() + " - " + course.getCourseName()).orElse("Course");
+            handleResult(request, response, isJson, true, "Attendance successfully marked PRESENT for " + courseTitle + "!");
             return;
         }
 

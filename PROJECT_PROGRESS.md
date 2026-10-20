@@ -432,10 +432,37 @@ All 7 test suites were executed back-to-back against the running system:
 | [`Stage3VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage3VerificationTest.java) | BCrypt Authentication, Legacy Migration, Unauthenticated Redirection, RBAC 403 Forbidden | 7 / 7 | ✅ PASS |
 | [`Stage4VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage4VerificationTest.java) | Student Official Record, Registration Rules, Drop Flow, Timetable, Low Attendance Warning | 7 / 7 | ✅ PASS |
 | [`Stage5VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage5VerificationTest.java) | Faculty Course CRUD, Cross-Faculty Edit/Delete Blocking, Roster Authorization, Schedule Validation | 7 / 7 | ✅ PASS |
-| [`Stage6VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage6VerificationTest.java) | 5s HMAC Token Rotation, Expired/Replay/Duplicate Rejection, Auto-Close, Concurrent Scans | 10 / 10 | ✅ PASS |
-| [`Stage7VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage7VerificationTest.java) | Session Reopen/Reclose, Reasoned Manual Overrides, Immutable Audit Trail, CSV Export, 6-Digit Code | 8 / 8 | ✅ PASS |
-| [`Stage8VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage8VerificationTest.java) | Session-Bound 6-Digit Code, Brute-Force Rate Limiting, Formula Uniformity, Full Regression | 5 / 5 | ✅ PASS |
-| **Total Automated Tests** | **Comprehensive System Lifecycle & Security Coverage (7+7+7+7+10+8+5)** | **51 / 51** | **✅ 100% PASS** |
+| [`Stage6VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage6VerificationTest.java) | 5s HMAC Token Rotation, Multi-Student Active QR, Expired/Replay/Duplicate Rejection, Auto-Close, Concurrent Scans | 11 / 11 | ✅ PASS |
+| [`Stage7VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage7VerificationTest.java) | Session Reopen/Reclose, Reasoned Manual Overrides, Append-Only Audit Trail, CSV Export, 6-Digit Code | 8 / 8 | ✅ PASS |
+| [`Stage8VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage8VerificationTest.java) | Session-Bound 6-Digit Code, Database-Backed Rate Limiting, Formula Uniformity, Full Regression | 5 / 5 | ✅ PASS |
+| [`ClassMeetingAttendanceVerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java) | Persistent Class Meeting Sessions, Ephemeral 5s QR Tokens, UTC Timezone, Reopen Idempotency, Reporting Invariance | 9 / 9 | ✅ PASS |
+| **Total Automated Tests** | **Comprehensive System Lifecycle, Security & Meeting Attendance Coverage (7+7+7+7+11+8+5+9)** | **61 / 61** | **✅ 100% PASS** |
+
+---
+
+## Stage 9: Persistent Class Meeting Session Architecture & UTC Timezone Strategy
+
+### Architecture Refactoring & Discrepancy Fixes
+1. **Separation of Class Meeting Session from Ephemeral QR Tokens:**
+   - A scheduled class meeting now possesses **one persistent attendance session** (`qr_sessions` row with a 60-minute duration).
+   - Ephemeral 5-second rotating cryptographic tokens (`session_token`) and 6-digit numeric fallbacks are updated directly on the existing meeting session.
+   - Polling `/qr/active` **never** creates a session row, **never** auto-closes an active meeting, and **never** triggers absentee reconciliation.
+   - Absentee reconciliation runs strictly when faculty clicks "End Session" (`/qr/close`) or when the meeting reaches its scheduled 60-minute end.
+
+2. **Consistent End-to-End UTC Timezone Strategy:**
+   - Configured Tomcat Connection Pool with `p.setInitSQL("SET time_zone = '+00:00'");` and UTC JDBC URL parameters (`serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true`).
+   - Implemented [`AppContextListener`](file:///c:/java_dbms_project/src/main/java/com/attendance/listener/AppContextListener.java) and static block in [`DBConnection`](file:///c:/java_dbms_project/src/main/java/com/attendance/util/DBConnection.java) setting `TimeZone.setDefault(TimeZone.getTimeZone("UTC"))`.
+   - All expiration and closure checks in SQL use `UTC_TIMESTAMP()` and `expires_at > UTC_TIMESTAMP()`, eliminating JVM/system timezone discrepancies.
+   - Preserved automatic session closure at scheduled class end if faculty forgets to close it, while ensuring 5-second QR token expiration never closes the meeting or marks absences.
+
+3. **Reopen & Scan Lifecycle:**
+   - Reopening an expired or closed meeting session reopens the exact same meeting ID without duplicating records.
+   - When a student was auto-marked `ABSENT` upon temporary closure and the faculty reopens the session, a valid scan by that student cleanly transitions their status from `ABSENT` to `PRESENT`.
+
+4. **Class Meeting Verification Test Evidence ([`ClassMeetingAttendanceVerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java)):**
+   - 9 test cases covering 10+ consecutive QR rotations, multi-student concurrent scanning on same token, multi-rotation single record invariant, single absentee reconciliation, reclose idempotency, reopen preservation, 1-row-per-meeting reporting and CSV query, meeting-based percentage calculation, and scheduled end closure.
+   - **Result:** 9 / 9 Passed (100%).
+
 
 
 

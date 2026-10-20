@@ -66,7 +66,7 @@ public class QrSessionDao implements Dao<QrSession> {
                      "JOIN courses c ON qs.course_id = c.id " +
                      "JOIN teachers t ON qs.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
-                     "WHERE qs.course_id = ? AND qs.is_active = TRUE AND qs.closed_at IS NULL AND qs.expires_at > NOW() " +
+                     "WHERE qs.course_id = ? AND qs.is_active = TRUE AND qs.closed_at IS NULL AND qs.expires_at > UTC_TIMESTAMP() " +
                      "ORDER BY qs.id DESC LIMIT 1";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -135,7 +135,7 @@ public class QrSessionDao implements Dao<QrSession> {
      */
     public boolean closeSession(int sessionId) {
         String selectSql = "SELECT course_id FROM qr_sessions WHERE id = ?";
-        String updateSql = "UPDATE qr_sessions SET is_active = FALSE, closed_at = NOW() WHERE id = ?";
+        String updateSql = "UPDATE qr_sessions SET is_active = FALSE, closed_at = UTC_TIMESTAMP() WHERE id = ?";
 
         int courseId = 0;
         try (Connection conn = DBConnection.getInstance().getConnection()) {
@@ -169,10 +169,10 @@ public class QrSessionDao implements Dao<QrSession> {
 
     /**
      * Reopens a closed session, resetting closed_at to NULL, marking is_active = TRUE,
-     * and extending expiration by 15 minutes.
+     * and extending expiration by 60 minutes.
      */
     public boolean reopenSession(int sessionId) {
-        String sql = "UPDATE qr_sessions SET is_active = TRUE, closed_at = NULL, expires_at = DATE_ADD(NOW(), INTERVAL 15 MINUTE) WHERE id = ?";
+        String sql = "UPDATE qr_sessions SET is_active = TRUE, closed_at = NULL, expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 60 MINUTE) WHERE id = ?";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, sessionId);
@@ -184,10 +184,11 @@ public class QrSessionDao implements Dao<QrSession> {
     }
 
     /**
-     * Auto-closes expired sessions and reconciles absentee records.
+     * Auto-closes expired sessions when a lecture meeting exceeds its scheduled end,
+     * and reconciles absentee records.
      */
     public int autoCloseExpiredSessions() {
-        String selectExpiredSql = "SELECT id FROM qr_sessions WHERE is_active = TRUE AND closed_at IS NULL AND expires_at <= NOW()";
+        String selectExpiredSql = "SELECT id FROM qr_sessions WHERE is_active = TRUE AND closed_at IS NULL AND expires_at <= UTC_TIMESTAMP()";
         int closedCount = 0;
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(selectExpiredSql);
@@ -208,7 +209,7 @@ public class QrSessionDao implements Dao<QrSession> {
     }
 
     public void deactivateOlderSessions(int courseId) {
-        String sql = "UPDATE qr_sessions SET is_active = FALSE, closed_at = NOW() WHERE course_id = ? AND is_active = TRUE";
+        String sql = "UPDATE qr_sessions SET is_active = FALSE, closed_at = UTC_TIMESTAMP() WHERE course_id = ? AND is_active = TRUE";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, courseId);

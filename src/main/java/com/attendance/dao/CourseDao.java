@@ -37,6 +37,26 @@ public class CourseDao implements Dao<Course> {
         return Optional.empty();
     }
 
+    public Optional<Course> findByCourseCode(String courseCode) {
+        String sql = "SELECT c.*, u.name AS teacher_name " +
+                     "FROM courses c " +
+                     "JOIN teachers t ON c.teacher_id = t.teacher_id " +
+                     "JOIN users u ON t.user_id = u.id " +
+                     "WHERE c.course_code = ?";
+        try (Connection conn = DBConnection.getInstance().getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, courseCode);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(mapResultSetToCourse(rs));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return Optional.empty();
+    }
+
     public List<Course> findByTeacherId(int teacherId) {
         List<Course> courses = new ArrayList<>();
         String sql = "SELECT c.*, u.name AS teacher_name " +

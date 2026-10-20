@@ -154,41 +154,37 @@ public class QrGenerateServlet extends HttpServlet {
             return;
         }
 
-        // 3. Auto-close expired sessions
-        qrSessionDao.autoCloseExpiredSessions();
+        // 3. Branch A: Ephemeral 5-Second QR Token Polling (/qr/active)
+        // CRITICAL ARCHITECTURAL GUARANTEE:
+        // Polling MUST NEVER create a class meeting session, MUST NEVER auto-close an active meeting,
+        // and MUST NEVER run absentee reconciliation. It only rotates the ephemeral token for an active meeting.
+        if ("/qr/active".equals(path)) {
+            Optional<QrSession> activeOpt = qrSessionDao.findActiveByCourseId(courseId);
+            if (!activeOpt.isPresent()) {
+                response.setContentType("application/json");
+                response.setCharacterEncoding("UTF-8");
+                try (PrintWriter out = response.getWriter()) {
+                    out.print("{\"status\":\"closed\",\"message\":\"Class meeting attendance session has ended or is not active.\"}");
+                }
+                return;
+            }
 
-        // 4. Retrieve or create active session
-        Optional<QrSession> activeOpt = qrSessionDao.findActiveByCourseId(courseId);
-        QrSession session;
-        if (activeOpt.isPresent()) {
-            session = activeOpt.get();
-        } else {
-            session = new QrSession();
-            session.setCourseId(courseId);
-            session.setTeacherId(teacher != null ? teacher.getTeacherId() : course.getTeacherId());
-            session.setExpiresAt(LocalDateTime.now().plusMinutes(15)); // 15-minute standard lecture attendance window
-            session.setActive(true);
-            session.setSessionToken("pending_init");
-            qrSessionDao.save(session);
-        }
+            QrSession session = activeOpt.get();
+            // Refresh ephemeral 5-second rotating cryptographic token and 6-digit numeric fallback
+            long now = System.currentTimeMillis();
+            String token = QrCodeUtil.generateSignedTokenWithTimestamp(session.getId(), courseId, now);
+            String numericCode = QrCodeUtil.computeNumericCode(session.getId(), courseId, now);
+            qrSessionDao.updateActiveToken(session.getId(), token);
+            session.setSessionToken(token);
 
-        // 5. Generate fresh cryptographically server-signed HMAC token for this 5-second rotation
-        long now = System.currentTimeMillis();
-        String token = QrCodeUtil.generateSignedTokenWithTimestamp(session.getId(), courseId, now);
-        String numericCode = QrCodeUtil.computeNumericCode(session.getId(), courseId, now);
-        qrSessionDao.updateActiveToken(session.getId(), token);
-        session.setSessionToken(token);
+            String host = request.getServerName();
+            int port = request.getServerPort();
+            String scheme = request.getScheme();
+            String baseUrl = scheme + "://" + host + (port == 80 || port == 443 ? "" : ":" + port) + request.getContextPath();
+            String fullScanUrl = baseUrl + "/qr/scan?token=" + token;
 
-        String host = request.getServerName();
-        int port = request.getServerPort();
-        String scheme = request.getScheme();
-        String baseUrl = scheme + "://" + host + (port == 80 || port == 443 ? "" : ":" + port) + request.getContextPath();
-        String fullScanUrl = baseUrl + "/qr/scan?token=" + token;
+            List<Attendance> markedList = attendanceDao.findBySession(session.getId());
 
-        List<Attendance> markedList = attendanceDao.findBySession(session.getId());
-
-        // 6. Return JSON response for 5-second auto-rotation client polling
-        if ("json".equalsIgnoreCase(format)) {
             response.setContentType("application/json");
             response.setCharacterEncoding("UTF-8");
             try (PrintWriter out = response.getWriter()) {
@@ -205,6 +201,41 @@ public class QrGenerateServlet extends HttpServlet {
             }
             return;
         }
+
+        // 4. Branch B: Teacher Launches or Views Live QR Display (/qr/generate)
+        // Clean up any historical class meetings whose scheduled duration (60+ min) genuinely expired hours ago
+        qrSessionDao.autoCloseExpiredSessions();
+
+        // Retrieve existing active meeting session or initialize a single persistent class meeting
+        Optional<QrSession> activeOpt = qrSessionDao.findActiveByCourseId(courseId);
+        QrSession session;
+        if (activeOpt.isPresent()) {
+            session = activeOpt.get();
+        } else {
+            session = new QrSession();
+            session.setCourseId(courseId);
+            session.setTeacherId(teacher != null ? teacher.getTeacherId() : course.getTeacherId());
+            // Standard 60-minute scheduled class meeting window in UTC
+            session.setExpiresAt(LocalDateTime.now().plusMinutes(60));
+            session.setActive(true);
+            session.setSessionToken("pending_init");
+            qrSessionDao.save(session);
+        }
+
+        // Generate initial rotating token for this active class meeting
+        long now = System.currentTimeMillis();
+        String token = QrCodeUtil.generateSignedTokenWithTimestamp(session.getId(), courseId, now);
+        String numericCode = QrCodeUtil.computeNumericCode(session.getId(), courseId, now);
+        qrSessionDao.updateActiveToken(session.getId(), token);
+        session.setSessionToken(token);
+
+        String host = request.getServerName();
+        int port = request.getServerPort();
+        String scheme = request.getScheme();
+        String baseUrl = scheme + "://" + host + (port == 80 || port == 443 ? "" : ":" + port) + request.getContextPath();
+        String fullScanUrl = baseUrl + "/qr/scan?token=" + token;
+
+        List<Attendance> markedList = attendanceDao.findBySession(session.getId());
 
         request.setAttribute("course", course);
         request.setAttribute("sessionToken", token);

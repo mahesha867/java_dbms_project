@@ -5,6 +5,7 @@ import org.apache.tomcat.jdbc.pool.PoolProperties;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.TimeZone;
 
 /**
  * Thread-Safe Database Connection Pool Manager.
@@ -15,12 +16,16 @@ import java.sql.SQLException;
  */
 public class DBConnection {
 
-    private static final String URL = "jdbc:mysql://localhost:3306/attendance_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
+    private static final String URL = "jdbc:mysql://localhost:3306/attendance_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true";
     private static final String USER = "root";
     private static final String PASSWORD = "root";
 
     private static DBConnection instance;
     private final DataSource dataSource;
+
+    static {
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+    }
 
     private DBConnection() {
         PoolProperties p = new PoolProperties();
@@ -28,6 +33,7 @@ public class DBConnection {
         p.setDriverClassName("com.mysql.cj.jdbc.Driver");
         p.setUsername(USER);
         p.setPassword(PASSWORD);
+        p.setInitSQL("SET time_zone = '+00:00'");
         p.setJmxEnabled(false);
         p.setTestWhileIdle(true);
         p.setTestOnBorrow(true);

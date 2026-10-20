@@ -67,6 +67,7 @@ public class Stage6VerificationTest {
         runTest("8. Simultaneous Scans & Race Condition Concurrency", Stage6VerificationTest::testSimultaneousScans);
         runTest("9. Transaction Behavior & Rollback Integrity", Stage6VerificationTest::testTransactionRollback);
         runTest("10. Typed Fallback Token Validation Identical to Camera", Stage6VerificationTest::testTypedFallbackValidation);
+        runTest("11. Multi-Student Active QR Scan & Per-Student Duplicate Rejection", Stage6VerificationTest::testMultiStudentActiveQrAndDuplicateRejection);
 
         System.out.println("========================================================");
         System.out.println("Stage 6 Tests Passed: " + totalPassed + " | Tests Failed: " + totalFailed);
@@ -447,6 +448,64 @@ public class Stage6VerificationTest {
         Optional<Attendance> record = attendanceDao.findBySessionAndStudent(session.getId(), 1);
         if (!record.isPresent() || !"PRESENT".equals(record.get().getStatus())) {
             throw new AssertionError("Attendance record not found for typed fallback scan");
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // TEST 11: Multi-Student Active QR Scan & Per-Student Duplicate Rejection
+    // ─────────────────────────────────────────────────────────────
+    private static void testMultiStudentActiveQrAndDuplicateRejection() throws Exception {
+        QrSessionDao sessionDao = new QrSessionDao();
+        CourseDao courseDao = new CourseDao();
+        AttendanceDao attendanceDao = new AttendanceDao();
+
+        // 1. Enroll both Student 1 (Aarav, id 1) and Student 2 (Priya, id 2) in Course 1
+        courseDao.enrollStudent(1, 1);
+        courseDao.enrollStudent(2, 1);
+
+        // 2. Create clean active test session
+        QrSession session = createTestSession(1, 1);
+
+        // 3. Generate active token and set as active on screen
+        String activeToken = QrCodeUtil.generateSignedToken(session.getId(), 1);
+        sessionDao.updateActiveToken(session.getId(), activeToken);
+
+        // 4. Student 1 scans the active QR code -> Success (HTTP 200 / PRESENT)
+        CookieManager cmStudent1 = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+        login(cmStudent1, "aarav@student.com", "student123");
+        String res1 = sendPostScan(cmStudent1, activeToken);
+        if (!res1.contains("\"success\":true")) {
+            throw new AssertionError("Student 1 scan of active QR expected success: true, got: " + res1);
+        }
+
+        // 5. Student 2 scans the SAME active QR code within valid window -> Success (HTTP 200 / PRESENT)
+        CookieManager cmStudent2 = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+        login(cmStudent2, "priya@student.com", "student123");
+        String res2 = sendPostScan(cmStudent2, activeToken);
+        if (!res2.contains("\"success\":true")) {
+            throw new AssertionError("Student 2 scan of same active QR expected success: true, got: " + res2);
+        }
+
+        // 6. Repeat scan by Student 1 -> Rejected (DUPLICATE)
+        String repeat1 = sendPostScan(cmStudent1, activeToken);
+        if (!repeat1.contains("already marked")) {
+            throw new AssertionError("Repeat scan by Student 1 should be rejected as duplicate, got: " + repeat1);
+        }
+
+        // 7. Repeat scan by Student 2 -> Rejected (DUPLICATE)
+        String repeat2 = sendPostScan(cmStudent2, activeToken);
+        if (!repeat2.contains("already marked")) {
+            throw new AssertionError("Repeat scan by Student 2 should be rejected as duplicate, got: " + repeat2);
+        }
+
+        // 8. Verify both students have exactly 1 PRESENT record in DB
+        Optional<Attendance> s1 = attendanceDao.findBySessionAndStudent(session.getId(), 1);
+        if (!s1.isPresent() || !"PRESENT".equals(s1.get().getStatus())) {
+            throw new AssertionError("Student 1 record missing or not PRESENT in DB");
+        }
+        Optional<Attendance> s2 = attendanceDao.findBySessionAndStudent(session.getId(), 2);
+        if (!s2.isPresent() || !"PRESENT".equals(s2.get().getStatus())) {
+            throw new AssertionError("Student 2 record missing or not PRESENT in DB");
         }
     }
 

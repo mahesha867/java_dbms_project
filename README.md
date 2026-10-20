@@ -2,22 +2,24 @@
 ### Dynamic QR Attendance with 5-Second Cryptographic Rotation & Anti-Proxy Architecture
 
 [![Java 21](https://img.shields.io/badge/Java-21%20LTS-orange.svg)](https://www.oracle.com/java/)
-[![Tomcat 10.1](https://img.shields.io/badge/Tomcat-10.1-blue.svg)](https://tomcat.apache.org/)
-[![MySQL 8.0](https://img.shields.io/badge/MySQL-8.0-blue.svg)](https://www.mysql.com/)
-[![Tests Passing](https://img.shields.io/badge/Automated%20Tests-51%2F51%20PASS-brightgreen.svg)]()
+[![Tomcat 10.1](https://img.shields.io/badge/Tomcat-10.1.20-blue.svg)](https://tomcat.apache.org/)
+[![Jakarta Servlet 6.0](https://img.shields.io/badge/Jakarta%20Servlet-6.0-blueviolet.svg)](https://jakarta.ee/)
+[![MySQL 8.0](https://img.shields.io/badge/MySQL-8.0.46-blue.svg)](https://www.mysql.com/)
+[![Tests Passing](https://img.shields.io/badge/Automated%20Tests-61%2F61%20PASS-brightgreen.svg)]()
 
 ---
 
 ## 📋 Executive Overview
 
-**ScanIn** is an enterprise-grade, academic attendance management system engineered in **Java 21**, **Jakarta Servlets/JSP**, and **MySQL 8.0**, running on **Apache Tomcat 10.1**.
+**ScanIn** is an academic attendance management system engineered in **Java 21 LTS**, **Jakarta Servlet 6.0**, and **MySQL 8.0.46**, deployed on **Apache Tomcat 10.1.20**.
 
-The system completely eliminates proxy attendance and attendance fraud through:
-1. **5-Second Dynamic HMAC-SHA256 QR Tokens:** Cryptographically signed tokens rotate continuously every 5 seconds on the instructor's projector screen.
-2. **6-Digit Session-Bound Numeric Fallback Code:** A synchronized 6-digit numeric OTP derived via dynamic truncation for students without functioning cameras, protected by brute-force rate-limiting.
-3. **Strict ACID Concurrency Handling:** Multi-thread race conditions during simultaneous student scans are resolved using database constraints and automatic transaction rollbacks.
-4. **Immutable Audit Trail:** Any reasoned manual status override (On-Duty `OD`, Medical `EXCUSED`, `PRESENT`, `ABSENT`, `LATE`) is immutably logged with actor ID, timestamp, and justification.
-5. **Centralized Role-Based Access Control:** Strict server-side filtering ensures role boundaries (students receive HTTP 403 when probing faculty resources).
+The system mitigates classroom proxy attendance and screenshot reuse through:
+1. **5-Second Dynamic HMAC-SHA256 QR Tokens:** Cryptographically signed tokens rotate continuously every 5 seconds on the instructor's display. All enrolled students in the room can scan the currently active token during its validity window (7 seconds total = 5s rotation + 2s network transmission tolerance).
+2. **6-Digit Session-Bound Numeric Fallback Code:** A synchronized 6-digit numeric OTP derived from HMAC dynamic truncation for students with camera or browser issues, bound to the active course/session with ~15 seconds of tolerance.
+3. **Database-Backed Rate Limiting:** Rapid guessing protection in MySQL (`scan_attempts`) blocks student accounts after $\ge 5$ failed attempts within 60 seconds, persisting across server restarts.
+4. **Strict ACID Concurrency Handling:** Multi-thread race conditions during simultaneous student scans are resolved using database constraints (`UNIQUE KEY (session_id, student_id)`) and automatic transaction rollbacks.
+5. **Application-Enforced Append-Only Audit Trail:** Any reasoned manual status override (On-Duty `OD`, Medical `EXCUSED`, `PRESENT`, `ABSENT`, `LATE`) is logged with actor user ID, timestamp, and justification.
+6. **Centralized Role-Based Access Control:** Strict server-side filtering (`SecurityFilter`) ensures role boundaries (students receive HTTP 403 Forbidden when probing faculty resources).
 
 ---
 
@@ -285,12 +287,21 @@ Follow this structured walkthrough when presenting to evaluators or faculty pane
 
 ## 🧪 Comprehensive Automated Test Evidence
 
-The repository includes complete automated test suites executing live against Tomcat 10 and MySQL 8.0:
+The repository includes complete automated test suites executing live against Tomcat 10.1.20 and MySQL 8.0.46:
 
 ```bash
-# Execute entire 51-test verification suite
+# Compile test suites into bin
 javac -encoding UTF-8 -cp "lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" -d bin src/test/java/com/attendance/*.java
+
+# Run full regression suites
+java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.Stage2VerificationTest
+java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.Stage3VerificationTest
+java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.Stage4VerificationTest
+java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.Stage5VerificationTest
+java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.Stage6VerificationTest
+java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.Stage7VerificationTest
 java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.Stage8VerificationTest
+java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance.ClassMeetingAttendanceVerificationTest
 ```
 
 | Verification Suite | Target Areas | Tests | Result |
@@ -299,14 +310,25 @@ java -cp "bin;lib/*;tomcat/lib/*;src/main/webapp/WEB-INF/classes" com.attendance
 | [`Stage3VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage3VerificationTest.java) | BCrypt Authentication, Legacy Migration, Unauthenticated Redirection, RBAC 403 Forbidden | 7 / 7 | ✅ PASS |
 | [`Stage4VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage4VerificationTest.java) | Student Official Record, Registration Rules, Drop Flow, Timetable, Low Attendance Warning | 7 / 7 | ✅ PASS |
 | [`Stage5VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage5VerificationTest.java) | Faculty Course CRUD, Cross-Faculty Edit/Delete Blocking, Roster Authorization, Schedule Validation | 7 / 7 | ✅ PASS |
-| [`Stage6VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage6VerificationTest.java) | 5s HMAC Token Rotation, Expired/Replay/Duplicate Rejection, Auto-Close, Concurrent Scans | 10 / 10 | ✅ PASS |
-| [`Stage7VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage7VerificationTest.java) | Session Reopen/Reclose, Reasoned Manual Overrides, Immutable Audit Trail, CSV Export, 6-Digit Code | 8 / 8 | ✅ PASS |
-| [`Stage8VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage8VerificationTest.java) | Session-Bound 6-Digit Code, Brute-Force Rate Limiting, Formula Uniformity, Full Regression | 5 / 5 | ✅ PASS |
-| **Total Automated Tests** | **All Layers & Life-Cycle Flows (7+7+7+7+10+8+5)** | **51 / 51** | **✅ 100% PASS** |
+| [`Stage6VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage6VerificationTest.java) | 5s HMAC Token Rotation, Multi-Student Active QR, Expired/Replay/Duplicate Rejection, Auto-Close, Concurrent Scans | 11 / 11 | ✅ PASS |
+| [`Stage7VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage7VerificationTest.java) | Session Reopen/Reclose, Reasoned Manual Overrides, Append-Only Audit Trail, CSV Export, 6-Digit Code | 8 / 8 | ✅ PASS |
+| [`Stage8VerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage8VerificationTest.java) | Session-Bound 6-Digit Code, Database-Backed Rate Limiting, Formula Uniformity, Full Regression | 5 / 5 | ✅ PASS |
+| [`ClassMeetingAttendanceVerificationTest.java`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java) | Persistent Class Meetings, Ephemeral 5s QR Tokens, UTC Timezone, Reopen Idempotency, Reporting Invariance | 9 / 9 | ✅ PASS |
+| **Total Automated Tests** | **All Layers & Life-Cycle Flows (7+7+7+7+11+8+5+9)** | **61 / 61** | **✅ 100% PASS** |
+
+---
+
+## ⚠️ Known Limitations for Academic Demonstration
+
+When presenting or analyzing this project in an academic setting, note the following verified boundaries:
+1. **Live Video Relay / Screen Mirroring:** Short-lived (5-second) rotating tokens prevent screenshot reuse, but cannot prevent an in-class student from streaming their screen or sharing a live video feed to an absent peer outside the classroom.
+2. **Physical Device Sharing:** The system does not incorporate biometric device binding or GPS geofencing; an attendee physically present in the room could potentially log into an absent student's account on a shared device.
+3. **Database-Level Immutability:** The audit log is append-only at the application DAO layer (`AttendanceAuditLogDao` only implements `INSERT` and `SELECT`), but MySQL administrative users with direct database access (`root`) retain raw DML rights unless database-level table privileges are restricted.
+4. **Rate Limiting Scope:** Rate limiting is enforced strictly per `student_id` in the database. Client IP rate limiting is intentionally not enforced to comply with student privacy data minimization principles.
 
 ---
 
 ## 👥 Authors & Academic Context
 - **Project:** ScanIn Smart Attendance Marking System
-- **Technologies:** Java 21 LTS, Apache Tomcat 10.1, Jakarta Servlets, MySQL 8.0, JDBC
+- **Runtime Environment:** OpenJDK 21 LTS, Apache Tomcat 10.1.20, Jakarta Servlet 6.0, MySQL 8.0.46
 - **Course / Degree:** Object-Oriented Programming & Database Management Systems Project
