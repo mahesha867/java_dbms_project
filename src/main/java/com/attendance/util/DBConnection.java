@@ -16,9 +16,9 @@ import java.util.TimeZone;
  */
 public class DBConnection {
 
-    private static final String URL = "jdbc:mysql://localhost:3306/attendance_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true";
-    private static final String USER = "root";
-    private static final String PASSWORD = "root";
+    private static final String DEFAULT_URL = "jdbc:mysql://localhost:3306/attendance_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true";
+    private static final String DEFAULT_USER = "root";
+    private static final String DEFAULT_PASSWORD = "root";
 
     private static DBConnection instance;
     private final DataSource dataSource;
@@ -27,12 +27,48 @@ public class DBConnection {
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
     }
 
+    private static String resolveDbUrl() {
+        String envUrl = System.getenv("DB_URL");
+        if (envUrl == null || envUrl.trim().isEmpty()) {
+            envUrl = System.getenv("DATABASE_URL");
+        }
+        if (envUrl == null || envUrl.trim().isEmpty()) {
+            envUrl = System.getenv("MYSQL_URL");
+        }
+        if (envUrl != null && !envUrl.trim().isEmpty()) {
+            String url = envUrl.trim();
+            if (url.startsWith("mysql://")) {
+                url = "jdbc:" + url;
+            }
+            if (!url.contains("serverTimezone")) {
+                String sep = url.contains("?") ? "&" : "?";
+                url += sep + "serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true";
+            }
+            return url;
+        }
+        return DEFAULT_URL;
+    }
+
+    private static String resolveDbUser() {
+        String user = System.getenv("DB_USER");
+        if (user == null || user.trim().isEmpty()) user = System.getenv("DATABASE_USER");
+        if (user == null || user.trim().isEmpty()) user = System.getenv("MYSQL_USER");
+        return (user != null && !user.trim().isEmpty()) ? user.trim() : DEFAULT_USER;
+    }
+
+    private static String resolveDbPassword() {
+        String pass = System.getenv("DB_PASSWORD");
+        if (pass == null || pass.trim().isEmpty()) pass = System.getenv("DATABASE_PASSWORD");
+        if (pass == null || pass.trim().isEmpty()) pass = System.getenv("MYSQL_PASSWORD");
+        return (pass != null) ? pass : DEFAULT_PASSWORD;
+    }
+
     private DBConnection() {
         PoolProperties p = new PoolProperties();
-        p.setUrl(URL);
+        p.setUrl(resolveDbUrl());
         p.setDriverClassName("com.mysql.cj.jdbc.Driver");
-        p.setUsername(USER);
-        p.setPassword(PASSWORD);
+        p.setUsername(resolveDbUser());
+        p.setPassword(resolveDbPassword());
         p.setInitSQL("SET time_zone = '+00:00'");
         p.setJmxEnabled(false);
         p.setTestWhileIdle(true);

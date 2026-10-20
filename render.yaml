@@ -1,0 +1,16 @@
+﻿# Render Blueprint Specification for ScanIn Smart Attendance Marking System
+services:
+  - type: web
+    name: scanin-attendance
+    env: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
