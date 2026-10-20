@@ -1,25 +1,37 @@
 # ⚡ ScanIn — Smart Attendance Marking System
-### Dynamic QR Attendance with 5-Second Cryptographic Rotation & Anti-Proxy Architecture
+### Dynamic QR Attendance with 15-Second Cryptographic Rotation & Anti-Proxy Architecture
 
+[![Live on Render](https://img.shields.io/badge/Render-Live%20Deployment-success?logo=render&logoColor=white)](https://scanin-attendance.onrender.com/)
 [![Java 21](https://img.shields.io/badge/Java-21%20LTS-orange.svg)](https://www.oracle.com/java/)
 [![Tomcat 10.1](https://img.shields.io/badge/Tomcat-10.1.20-blue.svg)](https://tomcat.apache.org/)
 [![Jakarta Servlet 6.0](https://img.shields.io/badge/Jakarta%20Servlet-6.0-blueviolet.svg)](https://jakarta.ee/)
-[![MySQL 8.0](https://img.shields.io/badge/MySQL-8.0.46-blue.svg)](https://www.mysql.com/)
-[![Tests Passing](https://img.shields.io/badge/Automated%20Tests-61%2F61%20PASS-brightgreen.svg)]()
+[![MySQL 8.0 / TiDB](https://img.shields.io/badge/MySQL%20%2F%20TiDB-8.0%20Compatible-blue.svg)](https://www.mysql.com/)
+[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Tests Passing](https://img.shields.io/badge/Automated%20Tests-62%2F62%20PASS-brightgreen.svg)]()
+
+---
+
+## 🌐 Live Production Deployment
+
+- **Production URL:** [https://scanin-attendance.onrender.com/](https://scanin-attendance.onrender.com/)
+- **Hosting Platform:** Render Web Service (Dockerized Apache Tomcat 10.1 / OpenJDK 21)
+- **Database Engine:** TiDB Cloud Serverless (MySQL 8.0 Protocol Compatible, TLS/SSL Encrypted)
+- **Zero-Config Migrations:** Self-healing automated schema migrations on container startup via [`AppContextListener`](file:///c:/java_dbms_project/src/main/java/com/attendance/listener/AppContextListener.java).
 
 ---
 
 ## 📋 Executive Overview
 
-**ScanIn** is an academic attendance management system engineered in **Java 21 LTS**, **Jakarta Servlet 6.0**, and **MySQL 8.0.46**, deployed on **Apache Tomcat 10.1.20**.
+**ScanIn** is an enterprise-grade academic attendance management system engineered in **Java 21 LTS**, **Jakarta Servlet 6.0**, and **MySQL 8.0 / TiDB Cloud**, containerized with **Docker** and deployed on **Apache Tomcat 10.1.20**.
 
-The system mitigates classroom proxy attendance and screenshot reuse through:
-1. **5-Second Dynamic HMAC-SHA256 QR Tokens:** Cryptographically signed tokens rotate continuously every 5 seconds on the instructor's display. All enrolled students in the room can scan the currently active token during its validity window (7 seconds total = 5s rotation + 2s network transmission tolerance).
-2. **6-Digit Session-Bound Numeric Fallback Code:** A synchronized 6-digit numeric OTP derived from HMAC dynamic truncation for students with camera or browser issues, bound to the active course/session with ~15 seconds of tolerance.
-3. **Database-Backed Rate Limiting:** Rapid guessing protection in MySQL (`scan_attempts`) blocks student accounts after $\ge 5$ failed attempts within 60 seconds, persisting across server restarts.
-4. **Strict ACID Concurrency Handling:** Multi-thread race conditions during simultaneous student scans are resolved using database constraints (`UNIQUE KEY (session_id, student_id)`) and automatic transaction rollbacks.
-5. **Application-Enforced Append-Only Audit Trail:** Any reasoned manual status override (On-Duty `OD`, Medical `EXCUSED`, `PRESENT`, `ABSENT`, `LATE`) is logged with actor user ID, timestamp, and justification.
-6. **Centralized Role-Based Access Control:** Strict server-side filtering (`SecurityFilter`) ensures role boundaries (students receive HTTP 403 Forbidden when probing faculty resources).
+The system prevents classroom proxy attendance and screenshot reuse through:
+1. **15-Second Dynamic HMAC-SHA256 QR Tokens:** Cryptographically signed tokens rotate continuously every 15 seconds on the instructor's display. All enrolled students in the room can scan the active token during its 20-second validity window (15s display rotation + 5s network transmission tolerance).
+2. **6-Digit Session-Bound Numeric Fallback Code:** A synchronized 6-digit numeric OTP derived from HMAC dynamic truncation for students with camera or browser issues, bound to the active course/session with multi-window tolerance.
+3. **Throttled Camera Scanner & Anti-Flicker Protection:** Client-side scanner pauses camera stream during token submission and enforces a 2.5-second cooling-off period on invalid attempts to eliminate rapid re-scanning loops.
+4. **Database-Backed Rate Limiting:** Rapid guessing protection in MySQL/TiDB (`scan_attempts`) blocks student accounts after $\ge 5$ failed attempts within 60 seconds, persisting across server restarts.
+5. **Strict ACID Concurrency Handling:** Multi-thread race conditions during simultaneous student scans are resolved using database constraints (`UNIQUE KEY (student_id, qr_session_id)`) and automatic transaction rollbacks.
+6. **Application-Enforced Append-Only Audit Trail:** Any reasoned manual status override (On-Duty `OD`, Medical `EXCUSED`, `PRESENT`, `ABSENT`, `LATE`) is logged with actor user ID, timestamp, and justification.
+7. **Centralized Role-Based Access Control:** Strict server-side filtering (`SecurityFilter`) ensures role boundaries (students receive HTTP 403 Forbidden when probing faculty resources).
 
 ---
 
@@ -184,23 +196,25 @@ erDiagram
 
 ## 🛡️ Anti-Proxy & Security Architecture
 
-1. **5-Second Dynamic HMAC-SHA256 Token Rotation:**
+1. **15-Second Dynamic HMAC-SHA256 Token Rotation:**
    - Server signs payloads containing `sessionId.courseId.timestampMs.nonce` using a constant-time HMAC-SHA256 signature.
-   - Tokens expire strictly after 7 seconds (5-second window + 2-second network grace). Expired tokens are immediately rejected as `EXPIRED`.
+   - Tokens expire strictly after 20 seconds (15-second display rotation + 5-second network transmission grace). Expired tokens are immediately rejected as `EXPIRED`.
 2. **Replay Attack Neutralization:**
-   - As soon as a student marks attendance, the token hash is marked in `scan_attempts`. Subsequent attempts with the same token are rejected as `REPLAYED`.
+   - As soon as a student marks attendance, the token hash is logged in `scan_attempts`. Subsequent attempts with the same token are rejected as `REPLAYED` or `DUPLICATE`.
 3. **Session-Bound 6-Digit Numeric Fallback Code:**
-   - Derived using TOTP-style dynamic truncation (`computeNumericCode`).
+   - Derived using TOTP-style dynamic truncation (`computeNumericCode`) rotating synchronously with the QR code every 15 seconds.
    - Strictly course-bound and session-bound: students cannot use a code for a course they are not enrolled in.
-4. **Rapid Guessing & Brute-Force Rate Limiting:**
+4. **Throttled Camera Scanner & Anti-Flicker Protection:**
+   - The in-app camera scanner (`qr-scan.jsp`) pauses video frame analysis during token verification and enforces a 2.5-second cooling-off period on invalid attempts to eliminate rapid re-scanning loops.
+5. **Rapid Guessing & Brute-Force Rate Limiting:**
    - If an account accumulates $\ge 5$ failed scans within a 60-second sliding window, `QrScanServlet` blocks further requests with `RATE_LIMITED`.
-5. **ACID Concurrency & Race-Condition Safe:**
+6. **ACID Concurrency & Race-Condition Safe:**
    - Database constraint `UNIQUE KEY unique_attendance (student_id, qr_session_id)` prevents concurrent double-marking. Rolled back automatically on code 1062.
-6. **Centralized Server-Side RBAC (`SecurityFilter`):**
+7. **Centralized Server-Side RBAC (`SecurityFilter`):**
    - Direct URL tampering (e.g. students trying to access `/reports`, `/qr/generate`, or `/teacher/*`) triggers **HTTP 403 Forbidden**.
-7. **BCrypt Password Storage:**
+8. **BCrypt Password Storage:**
    - All passwords hashed using salted BCrypt (`$2a$10$`). Plaintext storage and hardcoded bypasses completely removed.
-8. **Data Minimization:**
+9. **Data Minimization:**
    - Raw reusable tokens and IP addresses are never persisted. Only one-way SHA-256 hashes are stored in `scan_attempts`.
 
 ---
@@ -217,13 +231,23 @@ $$\text{Attendance Percentage} = \frac{\text{Attended Sessions (PRESENT + LATE +
 
 ---
 
-## 🚀 Quick Start & Launch
+## 🚀 Quick Start & Deployment
 
-### Prerequisites
+### Option A: Cloud Production Deployment (Render + TiDB Cloud)
+The system is fully containerized and production-ready on Render with TiDB Cloud Serverless:
+- **Live URL:** [https://scanin-attendance.onrender.com/](https://scanin-attendance.onrender.com/)
+- **Configuration:** Defined in [`render.yaml`](file:///c:/java_dbms_project/render.yaml) and [`Dockerfile`](file:///c:/java_dbms_project/Dockerfile).
+- **Environment Variables:**
+  - `DB_URL`: `jdbc:mysql://<host>:4000/attendance_db?sslMode=VERIFY_IDENTITY`
+  - `DB_USER`: Database username
+  - `DB_PASSWORD`: Database password
+
+### Option B: Local 1-Click Launch (Windows)
+#### Prerequisites
 - **Java 21 LTS** installed and available on `PATH`.
 - **MySQL 8.0** running on `localhost:3306` with credentials `root` / `root`.
 
-### 1-Click Launch
+#### 1-Click Launch
 Execute the build and run scripts in Command Prompt or PowerShell:
 ```bat
 .\build.bat
@@ -261,9 +285,9 @@ Follow this structured walkthrough when presenting to evaluators or faculty pane
 
 ### Phase 2: Dynamic Live QR & Anti-Proxy Rotation (1.5 Minutes)
 1. On the Faculty screen, click **"📱 Launch Live QR Session"** for CS501.
-2. Observe the dynamic 5-second countdown timer. Show evaluators how the QR code and the **6-digit numeric fallback code** (e.g. `492018`) regenerate synchronously every 5 seconds.
-3. On the Student screen, click **"📷 Launch Camera Scanner"**.
-4. Type the active 6-digit numeric fallback code and submit.
+2. Observe the dynamic 15-second countdown timer. Show evaluators how the QR code and the **6-digit numeric fallback code** (e.g. `431944`) regenerate synchronously every 15 seconds.
+3. On the Student screen (or mobile device camera), click **"📷 Launch Camera Scanner"** or scan directly.
+4. Scan the live QR code or type the active 6-digit numeric fallback code.
 5. Immediately observe:
    - Student receives confirmation: *"Attendance successfully marked PRESENT!"*
    - Faculty projector counter instantly increments: *"1 student marked"*.
