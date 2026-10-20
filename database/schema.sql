@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS qr_sessions (
     course_id   INT NOT NULL,
     teacher_id  INT NOT NULL,
     expires_at  TIMESTAMP NOT NULL,
+    closed_at   TIMESTAMP NULL DEFAULT NULL,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_active   BOOLEAN DEFAULT TRUE,
     FOREIGN KEY (course_id)  REFERENCES courses(id) ON DELETE CASCADE,

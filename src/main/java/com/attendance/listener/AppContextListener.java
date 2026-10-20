@@ -36,6 +36,19 @@ public class AppContextListener implements ServletContextListener {
                 System.out.println("[AppContextListener] qr_sessions.session_token migration notice: " + e.getMessage());
             }
 
+            // 1b. Ensure closed_at column exists in qr_sessions
+            try {
+                stmt.executeUpdate("ALTER TABLE qr_sessions ADD COLUMN IF NOT EXISTS closed_at TIMESTAMP NULL DEFAULT NULL");
+                System.out.println("[AppContextListener] Ensured qr_sessions.closed_at column exists.");
+            } catch (Exception e1) {
+                try {
+                    stmt.executeUpdate("ALTER TABLE qr_sessions ADD COLUMN closed_at TIMESTAMP NULL DEFAULT NULL");
+                    System.out.println("[AppContextListener] Added qr_sessions.closed_at column.");
+                } catch (Exception e2) {
+                    System.out.println("[AppContextListener] qr_sessions.closed_at column notice: " + e2.getMessage());
+                }
+            }
+
             // 2. Expand scan_attempts outcome column if needed
             try {
                 stmt.executeUpdate("ALTER TABLE scan_attempts MODIFY COLUMN outcome VARCHAR(50) NOT NULL");
