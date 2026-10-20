@@ -86,7 +86,13 @@ public class LoginServlet extends HttpServlet {
             }
         }
 
-        request.setAttribute("errorMessage", "Invalid email or password. Please try again.");
+        if (UserDao.lastSqlError != null) {
+            request.setAttribute("errorMessage", "Database Error: " + UserDao.lastSqlError);
+        } else if (!userOpt.isPresent()) {
+            request.setAttribute("errorMessage", "No account found for '" + email.trim() + "'. (Ensure database/schema.sql was executed on your database).");
+        } else {
+            request.setAttribute("errorMessage", "Incorrect password. Please try again.");
+        }
         request.setAttribute("enteredEmail", email);
         request.getRequestDispatcher("/WEB-INF/views/login.jsp").forward(request, response);
     }
