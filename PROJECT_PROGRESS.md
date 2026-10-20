@@ -435,8 +435,8 @@ All 7 test suites were executed back-to-back against the running system:
 | [`Stage6VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage6VerificationTest.java) | 5s HMAC Token Rotation, Multi-Student Active QR, Expired/Replay/Duplicate Rejection, Auto-Close, Concurrent Scans | 11 / 11 | ✅ PASS |
 | [`Stage7VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage7VerificationTest.java) | Session Reopen/Reclose, Reasoned Manual Overrides, Append-Only Audit Trail, CSV Export, 6-Digit Code | 8 / 8 | ✅ PASS |
 | [`Stage8VerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/Stage8VerificationTest.java) | Session-Bound 6-Digit Code, Database-Backed Rate Limiting, Formula Uniformity, Full Regression | 5 / 5 | ✅ PASS |
-| [`ClassMeetingAttendanceVerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java) | Persistent Class Meeting Sessions, Ephemeral 5s QR Tokens, UTC Timezone, Reopen Idempotency, Reporting Invariance | 9 / 9 | ✅ PASS |
-| **Total Automated Tests** | **Comprehensive System Lifecycle, Security & Meeting Attendance Coverage (7+7+7+7+11+8+5+9)** | **61 / 61** | **✅ 100% PASS** |
+| [`ClassMeetingAttendanceVerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java) | Persistent Class Meeting Sessions, Ephemeral 5s QR Tokens, UTC Timezone, Reopen Idempotency, Reporting Invariance, Merged Session Exclusion | 10 / 10 | ✅ PASS |
+| **Total Automated Tests** | **Comprehensive System Lifecycle, Security & Meeting Attendance Coverage (7+7+7+7+11+8+5+10)** | **62 / 62** | **✅ 100% PASS** |
 
 ---
 
@@ -459,9 +459,19 @@ All 7 test suites were executed back-to-back against the running system:
    - Reopening an expired or closed meeting session reopens the exact same meeting ID without duplicating records.
    - When a student was auto-marked `ABSENT` upon temporary closure and the faculty reopens the session, a valid scan by that student cleanly transitions their status from `ABSENT` to `PRESENT`.
 
-4. **Class Meeting Verification Test Evidence ([`ClassMeetingAttendanceVerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java)):**
-   - 9 test cases covering 10+ consecutive QR rotations, multi-student concurrent scanning on same token, multi-rotation single record invariant, single absentee reconciliation, reclose idempotency, reopen preservation, 1-row-per-meeting reporting and CSV query, meeting-based percentage calculation, and scheduled end closure.
-   - **Result:** 9 / 9 Passed (100%).
+4. **Meeting-Count Query & Merged Session Exclusion:**
+   - Updated `AttendanceDao.getAttendancePercentage()` to query `SELECT COUNT(DISTINCT id) FROM qr_sessions WHERE course_id = ? AND session_token NOT LIKE 'MERGED_INTO_%'`.
+   - Updated `QrSessionDao.findAll()` to filter out merged phantom sessions with `WHERE qs.session_token NOT LIKE 'MERGED_INTO_%'`.
+   - Prevents merged sessions preserved for audit traceability from inflating meeting counts or deflating attendance percentages.
+
+5. **Course 21 Archive-First Migration & Tested Reversal Script:**
+   - **Migration Script ([`migration_stage9_course21_archive.sql`](file:///c:/java_dbms_project/database/migration_stage9_course21_archive.sql)):** Archived full snapshots of sessions 208–214 and attendance 614–620 into `archived_qr_sessions` and `archived_attendance`. Preserved session 208 as canonical, rebound attendance 615 (`PRESENT`) to session 208, deleted phantom ABSENT records 614 and 616–620, and marked sessions 209–214 as `MERGED_INTO_208:`.
+   - **Rollback Script ([`rollback_stage9_course21.sql`](file:///c:/java_dbms_project/database/rollback_stage9_course21.sql)):** Corrected reversal order to delete rebound row 615 first (eliminating primary key collisions), restore all 7 attendance rows 614–620 with original columns, and restore session rows 208–214 directly from archived snapshots.
+   - Tested bidirectionally: Rollback and migration verified with 100% row count and session link fidelity. Course 1 and audit logs (15 records) completely untouched.
+
+6. **Class Meeting Verification Test Evidence ([`ClassMeetingAttendanceVerificationTest`](file:///c:/java_dbms_project/src/test/java/com/attendance/ClassMeetingAttendanceVerificationTest.java)):**
+   - 10 test cases covering 10+ consecutive QR rotations, multi-student concurrent scanning on same token, multi-rotation single record invariant, single absentee reconciliation, reclose idempotency, reopen preservation, 1-row-per-meeting reporting and CSV query, meeting-based percentage calculation, scheduled end closure, and Course 21 migration invariance / merged session exclusion.
+   - **Result:** 10 / 10 Passed (100%).
 
 
 

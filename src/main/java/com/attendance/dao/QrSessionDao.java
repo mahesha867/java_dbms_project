@@ -227,6 +227,7 @@ public class QrSessionDao implements Dao<QrSession> {
                      "JOIN courses c ON qs.course_id = c.id " +
                      "JOIN teachers t ON qs.teacher_id = t.teacher_id " +
                      "JOIN users u ON t.user_id = u.id " +
+                     "WHERE qs.session_token NOT LIKE 'MERGED_INTO_%' " +
                      "ORDER BY qs.id DESC";
         try (Connection conn = DBConnection.getInstance().getConnection();
              Statement stmt = conn.createStatement();

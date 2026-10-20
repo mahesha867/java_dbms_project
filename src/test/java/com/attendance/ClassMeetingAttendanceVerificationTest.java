@@ -61,6 +61,7 @@ public class ClassMeetingAttendanceVerificationTest {
         runTest("7. Report & CSV Query Renders 1 Row Per Student Per Class Meeting", ClassMeetingAttendanceVerificationTest::testReportRendersOneRowPerMeeting);
         runTest("8. Attendance Percentage Counts Class Meetings, Invariant to QR Rotations", ClassMeetingAttendanceVerificationTest::testAttendancePercentageMeetingBased);
         runTest("9. Active Meeting Remains Valid; QR Expiry Never Closes Class Meeting", ClassMeetingAttendanceVerificationTest::testActiveMeetingValidAndQrNeverCloses);
+        runTest("10. Course 21 Archive-First Migration & Merged Session Exclusion", ClassMeetingAttendanceVerificationTest::testCourse21MigrationAndMergedExclusion);
 
         System.out.println("========================================================");
         System.out.println("Meeting Tests Passed: " + totalPassed + " | Tests Failed: " + totalFailed);
@@ -477,6 +478,54 @@ public class ClassMeetingAttendanceVerificationTest {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // TEST 10: Course 21 Migration Invariance & Merged Session Exclusion
+    // ─────────────────────────────────────────────────────────────
+    private static void testCourse21MigrationAndMergedExclusion() throws Exception {
+        AttendanceDao attendanceDao = new AttendanceDao();
+        QrSessionDao sessionDao = new QrSessionDao();
+
+        // 1. Total meetings for Course 21 must be exactly 1 (sessions 209-214 are merged into 208)
+        int sessionCount = countSessionsForCourse(21);
+        if (sessionCount != 1) {
+            throw new AssertionError("Expected Course 21 to have exactly 1 active meeting session, got: " + sessionCount);
+        }
+
+        // 2. Attendance percentage for Student 1 in Course 21 must be 100.0% (1 attended / 1 meeting conducted)
+        double pct = attendanceDao.getAttendancePercentage(1, 21);
+        if (Math.abs(pct - 100.0) > 0.01) {
+            throw new AssertionError("Expected 100.0% for Aarav in Course 21, got: " + pct);
+        }
+
+        // 3. Active attendance table for Course 21 must have exactly 1 record: student 1, PRESENT on session 208
+        int attCount = countAttendanceForCourse(21);
+        if (attCount != 1) {
+            throw new AssertionError("Expected Course 21 to have exactly 1 active attendance row, got: " + attCount);
+        }
+
+        List<Attendance> c21Attendance = attendanceDao.findByCourse(21);
+        if (c21Attendance.size() != 1 || !"PRESENT".equals(c21Attendance.get(0).getStatus()) || c21Attendance.get(0).getQrSessionId() != 208) {
+            throw new AssertionError("Expected exactly 1 PRESENT attendance row bound to session 208 for Course 21");
+        }
+
+        // 4. Verify QrSessionDao.findAll() excludes merged phantom sessions for Course 21
+        List<QrSession> allSessions = sessionDao.findAll();
+        long c21Found = allSessions.stream().filter(s -> s.getCourseId() == 21).count();
+        if (c21Found != 1) {
+            throw new AssertionError("Expected QrSessionDao.findAll() to show exactly 1 session for Course 21, found: " + c21Found);
+        }
+
+        // 5. Verify archived rows in archived_attendance are complete and recoverable (7 rows)
+        String checkArchiveSql = "SELECT COUNT(*) FROM archived_attendance WHERE original_id BETWEEN 614 AND 620";
+        try (Connection conn = DBConnection.getInstance().getConnection();
+             PreparedStatement ps = conn.prepareStatement(checkArchiveSql);
+             ResultSet rs = ps.executeQuery()) {
+            if (!rs.next() || rs.getInt(1) != 7) {
+                throw new AssertionError("Expected 7 rows in archived_attendance for Course 21");
+            }
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Helper Methods
     // ─────────────────────────────────────────────────────────────
     private static int createTestCourse(String code, String name) {
@@ -493,7 +542,7 @@ public class ClassMeetingAttendanceVerificationTest {
     }
 
     private static int countSessionsForCourse(int courseId) {
-        String sql = "SELECT COUNT(*) FROM qr_sessions WHERE course_id = ?";
+        String sql = "SELECT COUNT(*) FROM qr_sessions WHERE course_id = ? AND session_token NOT LIKE 'MERGED_INTO_%'";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, courseId);

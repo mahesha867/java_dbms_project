@@ -139,7 +139,7 @@ public class AttendanceDao implements Dao<Attendance> {
      * Total sessions = all sessions initiated for the course.
      */
     public double getAttendancePercentage(int studentId, int courseId) {
-        String totalSessionsSql = "SELECT COUNT(DISTINCT id) FROM qr_sessions WHERE course_id = ?";
+        String totalSessionsSql = "SELECT COUNT(DISTINCT id) FROM qr_sessions WHERE course_id = ? AND session_token NOT LIKE 'MERGED_INTO_%'";
         String attendedSql = "SELECT COUNT(*) FROM attendance WHERE student_id = ? AND course_id = ? AND status IN ('PRESENT','LATE','OD')";
 
         int totalSessions = 0;
