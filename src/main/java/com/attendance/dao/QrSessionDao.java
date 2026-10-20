@@ -243,14 +243,13 @@ public class QrSessionDao implements Dao<QrSession> {
 
     @Override
     public boolean save(QrSession session) {
-        String sql = "INSERT INTO qr_sessions (session_token, course_id, teacher_id, expires_at, is_active) VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO qr_sessions (session_token, course_id, teacher_id, expires_at, is_active) VALUES (?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 60 MINUTE), ?)";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, session.getSessionToken());
             ps.setInt(2, session.getCourseId());
             ps.setInt(3, session.getTeacherId());
-            ps.setTimestamp(4, Timestamp.valueOf(session.getExpiresAt()));
-            ps.setBoolean(5, session.isActive());
+            ps.setBoolean(4, session.isActive());
             int affected = ps.executeUpdate();
             if (affected > 0) {
                 try (ResultSet keys = ps.getGeneratedKeys()) {
