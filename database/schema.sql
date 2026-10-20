@@ -110,16 +110,16 @@ CREATE TABLE IF NOT EXISTS attendance (
 
 -- Default teacher (password: teacher123)
 INSERT INTO users (name, email, password, role, phone) VALUES
-('Prof. Ramesh Kumar',  'teacher@attendance.com', '$2a$10$8K1p/a0dLKQZHrCGzYQJpOKx7YxWkh3CaRqJuoNkiP5MoXVlGlRfu', 'TEACHER', '9876543210'),
-('Prof. Sunita Sharma', 'sunita@attendance.com',  '$2a$10$8K1p/a0dLKQZHrCGzYQJpOKx7YxWkh3CaRqJuoNkiP5MoXVlGlRfu', 'TEACHER', '9876543211');
+('Prof. Ramesh Kumar',  'teacher@attendance.com', '$2a$10$4N8R1PtcJq..fGDPqmk4Gee8JbVoTrDMxSc1iZs74WU0BemBIU2MO', 'TEACHER', '9876543210'),
+('Prof. Sunita Sharma', 'sunita@attendance.com',  '$2a$10$4N8R1PtcJq..fGDPqmk4Gee8JbVoTrDMxSc1iZs74WU0BemBIU2MO', 'TEACHER', '9876543211');
 
 -- Default students (password: student123)
 INSERT INTO users (name, email, password, role, phone) VALUES
-('Aarav Singh',    'aarav@student.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LIKEceSEJ0y', 'STUDENT', '9000000001'),
-('Priya Sharma',   'priya@student.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LIKEceSEJ0y', 'STUDENT', '9000000002'),
-('Rahul Verma',    'rahul@student.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LIKEceSEJ0y', 'STUDENT', '9000000003'),
-('Sneha Patel',    'sneha@student.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LIKEceSEJ0y', 'STUDENT', '9000000004'),
-('Kiran Mehta',    'kiran@student.com',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LIKEceSEJ0y', 'STUDENT', '9000000005');
+('Aarav Singh',    'aarav@student.com',   '$2a$10$wALPiFbd0xdBlEilGrJxYuk7s0pWTI7WZAhg7uJI8XSCl7T9iltYC', 'STUDENT', '9000000001'),
+('Priya Sharma',   'priya@student.com',   '$2a$10$wALPiFbd0xdBlEilGrJxYuk7s0pWTI7WZAhg7uJI8XSCl7T9iltYC', 'STUDENT', '9000000002'),
+('Rahul Verma',    'rahul@student.com',   '$2a$10$wALPiFbd0xdBlEilGrJxYuk7s0pWTI7WZAhg7uJI8XSCl7T9iltYC', 'STUDENT', '9000000003'),
+('Sneha Patel',    'sneha@student.com',   '$2a$10$wALPiFbd0xdBlEilGrJxYuk7s0pWTI7WZAhg7uJI8XSCl7T9iltYC', 'STUDENT', '9000000004'),
+('Kiran Mehta',    'kiran@student.com',   '$2a$10$wALPiFbd0xdBlEilGrJxYuk7s0pWTI7WZAhg7uJI8XSCl7T9iltYC', 'STUDENT', '9000000005');
 
 -- Teachers
 INSERT INTO teachers (user_id, employee_id, department) VALUES
