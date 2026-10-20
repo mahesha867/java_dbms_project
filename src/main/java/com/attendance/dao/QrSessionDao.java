@@ -66,7 +66,7 @@ public class QrSessionDao implements Dao<QrSession> {
                      "LEFT JOIN courses c ON qs.course_id = c.id " +
                      "LEFT JOIN teachers t ON qs.teacher_id = t.teacher_id " +
                      "LEFT JOIN users u ON t.user_id = u.id " +
-                     "WHERE qs.course_id = ? AND qs.is_active = TRUE AND qs.closed_at IS NULL AND (qs.expires_at > UTC_TIMESTAMP() OR qs.expires_at IS NULL) " +
+                     "WHERE qs.course_id = ? AND qs.is_active = TRUE AND qs.closed_at IS NULL " +
                      "ORDER BY qs.id DESC LIMIT 1";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -136,7 +136,7 @@ public class QrSessionDao implements Dao<QrSession> {
      */
     public boolean closeSession(int sessionId) {
         String selectSql = "SELECT course_id FROM qr_sessions WHERE id = ?";
-        String updateSql = "UPDATE qr_sessions SET is_active = FALSE, closed_at = UTC_TIMESTAMP() WHERE id = ?";
+        String updateSql = "UPDATE qr_sessions SET is_active = FALSE, closed_at = CURRENT_TIMESTAMP WHERE id = ?";
 
         int courseId = 0;
         try (Connection conn = DBConnection.getInstance().getConnection()) {
@@ -173,7 +173,7 @@ public class QrSessionDao implements Dao<QrSession> {
      * and extending expiration by 60 minutes.
      */
     public boolean reopenSession(int sessionId) {
-        String sql = "UPDATE qr_sessions SET is_active = TRUE, closed_at = NULL, expires_at = DATE_ADD(UTC_TIMESTAMP(), INTERVAL 60 MINUTE) WHERE id = ?";
+        String sql = "UPDATE qr_sessions SET is_active = TRUE, closed_at = NULL, expires_at = DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE) WHERE id = ?";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, sessionId);
@@ -189,7 +189,7 @@ public class QrSessionDao implements Dao<QrSession> {
      * and reconciles absentee records.
      */
     public int autoCloseExpiredSessions() {
-        String selectExpiredSql = "SELECT id FROM qr_sessions WHERE is_active = TRUE AND closed_at IS NULL AND expires_at <= UTC_TIMESTAMP()";
+        String selectExpiredSql = "SELECT id FROM qr_sessions WHERE is_active = TRUE AND closed_at IS NULL AND expires_at <= CURRENT_TIMESTAMP";
         int closedCount = 0;
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(selectExpiredSql);
@@ -210,7 +210,7 @@ public class QrSessionDao implements Dao<QrSession> {
     }
 
     public void deactivateOlderSessions(int courseId) {
-        String sql = "UPDATE qr_sessions SET is_active = FALSE, closed_at = UTC_TIMESTAMP() WHERE course_id = ? AND is_active = TRUE";
+        String sql = "UPDATE qr_sessions SET is_active = FALSE, closed_at = CURRENT_TIMESTAMP WHERE course_id = ? AND is_active = TRUE";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, courseId);
@@ -247,7 +247,7 @@ public class QrSessionDao implements Dao<QrSession> {
         if (session.getSessionToken() == null || session.getSessionToken().trim().isEmpty() || "pending_init".equals(session.getSessionToken())) {
             session.setSessionToken("init_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().replace("-", ""));
         }
-        String sql = "INSERT INTO qr_sessions (session_token, course_id, teacher_id, expires_at, is_active) VALUES (?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 60 MINUTE), ?)";
+        String sql = "INSERT INTO qr_sessions (session_token, course_id, teacher_id, expires_at, is_active) VALUES (?, ?, ?, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 60 MINUTE), ?)";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, session.getSessionToken());
