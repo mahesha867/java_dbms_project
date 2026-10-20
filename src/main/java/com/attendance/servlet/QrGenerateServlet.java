@@ -1,0 +1,223 @@
+package com.attendance.servlet;
+
+import com.attendance.dao.AttendanceDao;
+import com.attendance.dao.CourseDao;
+import com.attendance.dao.QrSessionDao;
+import com.attendance.dao.TeacherDao;
+import com.attendance.model.Attendance;
+import com.attendance.model.Course;
+import com.attendance.model.QrSession;
+import com.attendance.model.Teacher;
+import com.attendance.model.User;
+import com.attendance.util.QrCodeUtil;
+import com.attendance.util.SessionUtil;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Servlet handling Dynamic QR Code Generation, 5-Second HMAC Token Rotation,
+ * and Session Closure with Absentee Reconcile.
+ */
+@WebServlet(name = "QrGenerateServlet", urlPatterns = {"/qr/generate", "/qr/active", "/qr/close", "/qr/reopen"})
+public class QrGenerateServlet extends HttpServlet {
+
+    private QrSessionDao qrSessionDao;
+    private CourseDao courseDao;
+    private TeacherDao teacherDao;
+    private AttendanceDao attendanceDao;
+
+    @Override
+    public void init() throws ServletException {
+        this.qrSessionDao = new QrSessionDao();
+        this.courseDao = new CourseDao();
+        this.teacherDao = new TeacherDao();
+        this.attendanceDao = new AttendanceDao();
+    }
+
+    @Override
+    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        User user = SessionUtil.getLoggedInUser(request);
+        if (user == null || !"TEACHER".equalsIgnoreCase(user.getRole())) {
+            response.sendRedirect(request.getContextPath() + "/login");
+            return;
+        }
+
+        Teacher teacher = SessionUtil.getTeacherProfile(request);
+        if (teacher == null) {
+            teacher = teacherDao.findByUserId(user.getId()).orElse(null);
+        }
+
+        String path = request.getServletPath();
+        String format = request.getParameter("format");
+
+        // 1. Handle Explicit Session Close
+        if ("/qr/close".equals(path)) {
+            String sessionIdParam = request.getParameter("sessionId");
+            if (sessionIdParam != null && !sessionIdParam.trim().isEmpty()) {
+                try {
+                    int sessionId = Integer.parseInt(sessionIdParam.trim());
+                    Optional<QrSession> sessionOpt = qrSessionDao.findById(sessionId);
+                    if (sessionOpt.isPresent()) {
+                        QrSession qs = sessionOpt.get();
+                        // Enforce teacher ownership
+                        if (teacher != null && qs.getTeacherId() != teacher.getTeacherId()) {
+                            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Unauthorized: You do not own this session.");
+                            return;
+                        }
+                        qrSessionDao.closeSession(sessionId);
+                    }
+                } catch (NumberFormatException ignored) {}
+            }
+            if ("json".equalsIgnoreCase(format)) {
+                response.setContentType("application/json");
+                response.setCharacterEncoding("UTF-8");
+                try (PrintWriter out = response.getWriter()) {
+                    out.print("{\"status\":\"closed\"}");
+                }
+                return;
+            }
+            response.sendRedirect(request.getContextPath() + "/teacher/dashboard?msg=session_closed");
+            return;
+        }
+
+        // 1b. Handle Session Reopen
+        if ("/qr/reopen".equals(path)) {
+            String sessionIdParam = request.getParameter("sessionId");
+            int courseId = 0;
+            if (sessionIdParam != null && !sessionIdParam.trim().isEmpty()) {
+                try {
+                    int sessionId = Integer.parseInt(sessionIdParam.trim());
+                    Optional<QrSession> sessionOpt = qrSessionDao.findById(sessionId);
+                    if (sessionOpt.isPresent()) {
+                        QrSession qs = sessionOpt.get();
+                        // Enforce teacher ownership
+                        if (teacher != null && qs.getTeacherId() != teacher.getTeacherId()) {
+                            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Unauthorized: You do not own this session.");
+                            return;
+                        }
+                        qrSessionDao.reopenSession(sessionId);
+                        courseId = qs.getCourseId();
+                    }
+                } catch (NumberFormatException ignored) {}
+            }
+            if ("json".equalsIgnoreCase(format)) {
+                response.setContentType("application/json");
+                response.setCharacterEncoding("UTF-8");
+                try (PrintWriter out = response.getWriter()) {
+                    out.print("{\"status\":\"reopened\"}");
+                }
+                return;
+            }
+            if (courseId > 0) {
+                response.sendRedirect(request.getContextPath() + "/qr/generate?courseId=" + courseId + "&msg=session_reopened");
+            } else {
+                response.sendRedirect(request.getContextPath() + "/teacher/dashboard?msg=session_reopened");
+            }
+            return;
+        }
+
+        // 2. Course ID Validation & Authorization
+        String courseIdParam = request.getParameter("courseId");
+        if (courseIdParam == null || courseIdParam.trim().isEmpty()) {
+            response.sendRedirect(request.getContextPath() + "/teacher/dashboard");
+            return;
+        }
+
+        int courseId;
+        try {
+            courseId = Integer.parseInt(courseIdParam.trim());
+        } catch (NumberFormatException e) {
+            response.sendRedirect(request.getContextPath() + "/teacher/dashboard");
+            return;
+        }
+
+        Optional<Course> courseOpt = courseDao.findById(courseId);
+        if (!courseOpt.isPresent()) {
+            response.sendRedirect(request.getContextPath() + "/teacher/dashboard");
+            return;
+        }
+        Course course = courseOpt.get();
+
+        // Enforce faculty course ownership
+        if (teacher != null && course.getTeacherId() != teacher.getTeacherId()) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Unauthorized: You do not own this course.");
+            return;
+        }
+
+        // 3. Auto-close expired sessions
+        qrSessionDao.autoCloseExpiredSessions();
+
+        // 4. Retrieve or create active session
+        Optional<QrSession> activeOpt = qrSessionDao.findActiveByCourseId(courseId);
+        QrSession session;
+        if (activeOpt.isPresent()) {
+            session = activeOpt.get();
+        } else {
+            session = new QrSession();
+            session.setCourseId(courseId);
+            session.setTeacherId(teacher != null ? teacher.getTeacherId() : course.getTeacherId());
+            session.setExpiresAt(LocalDateTime.now().plusMinutes(15)); // 15-minute standard lecture attendance window
+            session.setActive(true);
+            session.setSessionToken("pending_init");
+            qrSessionDao.save(session);
+        }
+
+        // 5. Generate fresh cryptographically server-signed HMAC token for this 5-second rotation
+        long now = System.currentTimeMillis();
+        String token = QrCodeUtil.generateSignedTokenWithTimestamp(session.getId(), courseId, now);
+        String numericCode = QrCodeUtil.computeNumericCode(session.getId(), courseId, now);
+        qrSessionDao.updateActiveToken(session.getId(), token);
+        session.setSessionToken(token);
+
+        String host = request.getServerName();
+        int port = request.getServerPort();
+        String scheme = request.getScheme();
+        String baseUrl = scheme + "://" + host + (port == 80 || port == 443 ? "" : ":" + port) + request.getContextPath();
+        String fullScanUrl = baseUrl + "/qr/scan?token=" + token;
+
+        List<Attendance> markedList = attendanceDao.findBySession(session.getId());
+
+        // 6. Return JSON response for 5-second auto-rotation client polling
+        if ("json".equalsIgnoreCase(format)) {
+            response.setContentType("application/json");
+            response.setCharacterEncoding("UTF-8");
+            try (PrintWriter out = response.getWriter()) {
+                out.print("{"
+                        + "\"status\":\"ok\","
+                        + "\"token\":\"" + token + "\","
+                        + "\"numericCode\":\"" + numericCode + "\","
+                        + "\"scanUrl\":\"" + fullScanUrl + "\","
+                        + "\"sessionId\":" + session.getId() + ","
+                        + "\"expiresInSeconds\":" + QrCodeUtil.ROTATION_INTERVAL_SECONDS + ","
+                        + "\"markedCount\":" + markedList.size()
+                        + "}");
+                out.flush();
+            }
+            return;
+        }
+
+        request.setAttribute("course", course);
+        request.setAttribute("sessionToken", token);
+        request.setAttribute("numericCode", numericCode);
+        request.setAttribute("scanUrl", fullScanUrl);
+        request.setAttribute("sessionId", session.getId());
+        request.setAttribute("markedCount", markedList.size());
+        request.getRequestDispatcher("/WEB-INF/views/qr-display.jsp").forward(request, response);
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        doGet(request, response);
+    }
+}

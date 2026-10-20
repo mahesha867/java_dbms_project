@@ -1,0 +1,25 @@
+# Compiled artifacts and temporary files
+bin/
+sources.txt
+*.log
+*.tmp
+*.class
+src/main/webapp/WEB-INF/classes/
+src/main/webapp/WEB-INF/lib/
+
+# Tomcat temporary and runtime work directories
+tomcat/logs/*
+tomcat/temp/*
+tomcat/work/*
+tomcat/webapps/attendance/
+!tomcat/logs/.gitkeep
+!tomcat/temp/.gitkeep
+!tomcat/work/.gitkeep
+
+# IDE and OS files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
