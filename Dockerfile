@@ -35,7 +35,7 @@ COPY render-entrypoint.sh /usr/local/tomcat/bin/render-entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/tomcat/bin/render-entrypoint.sh && \
     chmod +x /usr/local/tomcat/bin/render-entrypoint.sh
 
-# Expose HTTP ports
-EXPOSE 8080 10000
+# Expose HTTP port for Render
+EXPOSE 10000
 
 ENTRYPOINT ["/bin/sh", "/usr/local/tomcat/bin/render-entrypoint.sh"]
