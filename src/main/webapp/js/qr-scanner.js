@@ -3,13 +3,16 @@
  */
 
 // ── Dynamic QR Session Live 15-Second Auto-Refresher (Teacher Screen) ──
-function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNumericCode) {
+function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNumericCode, contextPath) {
     let timeLeft = 15;
     const timerElem = document.getElementById("qr-timer");
     const qrImg = document.getElementById("qr-image");
     const tokenDisplay = document.getElementById("token-display");
     const numericDisplay = document.getElementById("numeric-display");
     const countDisplay = document.getElementById("student-count");
+
+    const base = (contextPath !== undefined && contextPath !== null) ? contextPath : "";
+    const activeUrl = base + "/qr/active?courseId=" + courseId + "&format=json";
 
     function renderQr(token, scanUrl, numericCode) {
         if (qrImg) {
@@ -46,7 +49,7 @@ function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNum
         if (timeLeft <= 0) {
             timeLeft = 15;
             try {
-                const response = await fetch("active?courseId=" + courseId + "&format=json");
+                const response = await fetch(activeUrl);
                 if (response.ok) {
                     const data = await response.json();
                     if (data.status === "ok") {
@@ -66,7 +69,7 @@ function initDynamicQrSession(courseId, initialToken, initialScanUrl, initialNum
                     }
                 }
             } catch (err) {
-                console.error("Failed to rotate 5s QR token:", err);
+                console.error("Failed to rotate 15s QR token:", err);
             }
         }
     }, 1000);

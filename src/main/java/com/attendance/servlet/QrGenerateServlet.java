@@ -218,8 +218,17 @@ public class QrGenerateServlet extends HttpServlet {
             // Standard 60-minute scheduled class meeting window in UTC
             session.setExpiresAt(LocalDateTime.now().plusMinutes(60));
             session.setActive(true);
-            session.setSessionToken("pending_init");
-            qrSessionDao.save(session);
+            String initialPlaceholder = "init_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().replace("-", "");
+            session.setSessionToken(initialPlaceholder);
+            boolean saved = qrSessionDao.save(session);
+            if (!saved || session.getId() <= 0) {
+                activeOpt = qrSessionDao.findActiveByCourseId(courseId);
+                if (activeOpt.isPresent()) {
+                    session = activeOpt.get();
+                } else {
+                    throw new ServletException("Failed to initialize active attendance session for course ID " + courseId);
+                }
+            }
         }
 
         // Generate initial rotating token for this active class meeting

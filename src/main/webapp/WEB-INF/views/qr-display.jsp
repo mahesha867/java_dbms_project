@@ -97,7 +97,7 @@
     <script src="${pageContext.request.contextPath}/js/qr-scanner.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            initDynamicQrSession(<%= course != null ? course.getId() : 0 %>, "<%= sessionToken %>", "<%= scanUrl %>", "<%= request.getAttribute("numericCode") != null ? request.getAttribute("numericCode") : "" %>");
+            initDynamicQrSession(<%= course != null ? course.getId() : 0 %>, "<%= sessionToken %>", "<%= scanUrl %>", "<%= request.getAttribute("numericCode") != null ? request.getAttribute("numericCode") : "" %>", "${pageContext.request.contextPath}");
         });
 
         function copyToken() {

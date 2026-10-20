@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS enrollments (
 -- -------------------------------------------------------
 CREATE TABLE IF NOT EXISTS qr_sessions (
     id          INT AUTO_INCREMENT PRIMARY KEY,
-    session_token VARCHAR(64) NOT NULL UNIQUE,
+    session_token VARCHAR(255) NOT NULL UNIQUE,
     course_id   INT NOT NULL,
     teacher_id  INT NOT NULL,
     expires_at  TIMESTAMP NOT NULL,

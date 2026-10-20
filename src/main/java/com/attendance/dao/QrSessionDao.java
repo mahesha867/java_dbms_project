@@ -63,10 +63,10 @@ public class QrSessionDao implements Dao<QrSession> {
     public Optional<QrSession> findActiveByCourseId(int courseId) {
         String sql = "SELECT qs.*, c.course_code, c.course_name, u.name AS teacher_name " +
                      "FROM qr_sessions qs " +
-                     "JOIN courses c ON qs.course_id = c.id " +
-                     "JOIN teachers t ON qs.teacher_id = t.teacher_id " +
-                     "JOIN users u ON t.user_id = u.id " +
-                     "WHERE qs.course_id = ? AND qs.is_active = TRUE AND qs.closed_at IS NULL AND qs.expires_at > UTC_TIMESTAMP() " +
+                     "LEFT JOIN courses c ON qs.course_id = c.id " +
+                     "LEFT JOIN teachers t ON qs.teacher_id = t.teacher_id " +
+                     "LEFT JOIN users u ON t.user_id = u.id " +
+                     "WHERE qs.course_id = ? AND qs.is_active = TRUE AND qs.closed_at IS NULL AND (qs.expires_at > UTC_TIMESTAMP() OR qs.expires_at IS NULL) " +
                      "ORDER BY qs.id DESC LIMIT 1";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -244,6 +244,9 @@ public class QrSessionDao implements Dao<QrSession> {
 
     @Override
     public boolean save(QrSession session) {
+        if (session.getSessionToken() == null || session.getSessionToken().trim().isEmpty() || "pending_init".equals(session.getSessionToken())) {
+            session.setSessionToken("init_" + System.currentTimeMillis() + "_" + java.util.UUID.randomUUID().toString().replace("-", ""));
+        }
         String sql = "INSERT INTO qr_sessions (session_token, course_id, teacher_id, expires_at, is_active) VALUES (?, ?, ?, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 60 MINUTE), ?)";
         try (Connection conn = DBConnection.getInstance().getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {

@@ -118,26 +118,41 @@
             requestAnimationFrame(tick);
         }
 
+        let isSubmitting = false;
+
         function handleDetectedUrl(detectedData) {
-            let token = detectedData;
+            if (isSubmitting) return;
+            let token = detectedData ? detectedData.trim() : "";
+            if (!token) return;
+
             // If full URL scanned, extract token parameter
             try {
-                if (detectedData.includes("token=")) {
-                    const url = new URL(detectedData, window.location.origin);
-                    token = url.searchParams.get("token") || detectedData;
+                if (token.includes("token=")) {
+                    const url = new URL(token, window.location.origin);
+                    token = url.searchParams.get("token") || token;
                 }
-            } catch (e) {}
+            } catch (e) {
+                const match = token.match(/[?&]token=([^&]+)/);
+                if (match && match[1]) {
+                    token = decodeURIComponent(match[1]);
+                }
+            }
 
             submitToken(token);
         }
 
         async function submitManualToken() {
+            if (isSubmitting) return;
             const val = document.getElementById("manual-token").value.trim();
             if (!val) return;
             handleDetectedUrl(val);
         }
 
         async function submitToken(token) {
+            if (isSubmitting) return;
+            isSubmitting = true;
+            scanning = false; // Pause camera scanning while verification is in-flight
+
             feedback.style.display = "block";
             feedback.className = "alert alert-info";
             feedback.innerText = "⏳ Verifying attendance token...";
@@ -145,10 +160,36 @@
             try {
                 const response = await fetch("${pageContext.request.contextPath}/qr/scan", {
                     method: "POST",
-                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    headers: { 
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Accept": "application/json"
+                    },
                     body: "token=" + encodeURIComponent(token)
                 });
-                const res = await response.json();
+
+                if (response.status === 401) {
+                    feedback.className = "alert alert-danger";
+                    feedback.innerText = "⚠️ Session expired. Please log in again.";
+                    setTimeout(() => {
+                        window.location.href = "${pageContext.request.contextPath}/login?msg=session_expired";
+                    }, 1500);
+                    return;
+                }
+
+                let res;
+                try {
+                    res = await response.json();
+                } catch (jsonErr) {
+                    feedback.className = "alert alert-danger";
+                    feedback.innerText = "⚠️ Verification response was invalid. Please try again.";
+                    setTimeout(() => {
+                        isSubmitting = false;
+                        scanning = true;
+                        requestAnimationFrame(tick);
+                    }, 2500);
+                    return;
+                }
+
                 if (res.success) {
                     feedback.className = "alert alert-success";
                     feedback.innerText = "✅ " + res.message;
@@ -158,14 +199,21 @@
                 } else {
                     feedback.className = "alert alert-danger";
                     feedback.innerText = "⚠️ " + res.message;
-                    scanning = true;
-                    requestAnimationFrame(tick);
+                    // Provide 2.5s cooling-off period so student can read message, then resume scanning
+                    setTimeout(() => {
+                        isSubmitting = false;
+                        scanning = true;
+                        requestAnimationFrame(tick);
+                    }, 2500);
                 }
             } catch (e) {
                 feedback.className = "alert alert-danger";
-                feedback.innerText = "⚠️ Network error while verifying attendance.";
-                scanning = true;
-                requestAnimationFrame(tick);
+                feedback.innerText = "⚠️ Network error while verifying attendance. Retrying in 2 seconds...";
+                setTimeout(() => {
+                    isSubmitting = false;
+                    scanning = true;
+                    requestAnimationFrame(tick);
+                }, 2500);
             }
         }
 
